@@ -1,0 +1,1535 @@
+Đề 1. Loại ký tự của str1 xuất hiện trong str2 (cổng 2208)
+import java.net.*;
+import java.util.*;
+
+public class Bai1 {
+    public static void main(String[] args) throws Exception {
+        String host = "203.162.10.109";
+        int port = 2208;
+        String studentCode = "B23DCCN517";
+        String qCode = "XXXXXXXX"; // điền mã câu hỏi thật
+
+        DatagramSocket socket = new DatagramSocket();
+        socket.setSoTimeout(5000);
+        InetAddress addr = InetAddress.getByName(host);
+
+        // a. Gửi ;studentCode;qCode
+        byte[] out = (";" + studentCode + ";" + qCode).getBytes("UTF-8");
+        socket.send(new DatagramPacket(out, out.length, addr, port));
+
+        // b. Nhận requestId;str1;str2
+        byte[] buf = new byte[4096];
+        DatagramPacket in = new DatagramPacket(buf, buf.length);
+        socket.receive(in);
+        String received = new String(in.getData(), 0, in.getLength(), "UTF-8").trim();
+        System.out.println("Nhan: " + received);
+
+        String[] parts = received.split(";", 3);
+        String requestId = parts[0];
+        String str1 = parts[1];
+        String str2 = parts[2];
+
+        // c. Loại bỏ ký tự của str1 xuất hiện trong str2
+        Set<Character> set = new HashSet<>();
+        for (char c : str2.toCharArray()) set.add(c);
+
+        StringBuilder sb = new StringBuilder();
+        for (char c : str1.toCharArray()) {
+            if (!set.contains(c)) sb.append(c);
+        }
+        String strOutput = sb.toString();
+
+        byte[] resp = (requestId + ";" + strOutput).getBytes("UTF-8");
+        socket.send(new DatagramPacket(resp, resp.length, addr, port));
+        System.out.println("Gui: " + requestId + ";" + strOutput);
+
+        // d. Đóng socket
+        socket.close();
+    }
+}
+
+Đề 2. UDP.Product, sửa tên và số lượng bị đảo (cổng 2209)
+Đề này cần 2 file: lớp UDP.Product (đúng tên package, đúng serialVersionUID) và client.
+package UDP;
+
+import java.io.*;
+import java.net.*;
+import java.util.Arrays;
+
+class Product implements Serializable {
+    private static final long serialVersionUID = 20161107;
+
+    private String id;
+    private String code;
+    private String name;
+    private int quantity;
+
+    public Product(String id, String code, String name, int quantity) {
+        this.id = id;
+        this.code = code;
+        this.name = name;
+        this.quantity = quantity;
+    }
+
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+    public String getCode() { return code; }
+    public void setCode(String code) { this.code = code; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public int getQuantity() { return quantity; }
+    public void setQuantity(int quantity) { this.quantity = quantity; }
+
+    @Override
+    public String toString() {
+        return id + " | " + code + " | " + name + " | " + quantity;
+    }
+}
+
+public class Bai2 {
+    public static void main(String[] args) throws Exception {
+        String host = "203.162.10.109";
+        int port = 2209;
+        String studentCode = "B23DCCN517";
+        String qCode = "XXXXXXXX"; // điền mã câu hỏi thật
+
+        DatagramSocket socket = new DatagramSocket();
+        socket.setSoTimeout(5000);
+        InetAddress addr = InetAddress.getByName(host);
+
+        // Gửi ;studentCode;qCode
+        byte[] out = (";" + studentCode + ";" + qCode).getBytes("UTF-8");
+        socket.send(new DatagramPacket(out, out.length, addr, port));
+
+        // Nhận: 8 byte requestId + object Product
+        byte[] buf = new byte[65507];
+        DatagramPacket in = new DatagramPacket(buf, buf.length);
+        socket.receive(in);
+
+        byte[] data = Arrays.copyOf(in.getData(), in.getLength());
+        byte[] reqIdBytes = Arrays.copyOfRange(data, 0, 8);
+
+        ObjectInputStream ois = new ObjectInputStream(
+                new ByteArrayInputStream(data, 8, data.length - 8));
+        Product p = (Product) ois.readObject();
+        ois.close();
+        System.out.println("Truoc khi sua: " + p);
+
+        // Sửa tên: đổi chỗ từ đầu và từ cuối
+        String[] words = p.getName().trim().split("\\s+");
+        if (words.length >= 2) {
+            String tmp = words[0];
+            words[0] = words[words.length - 1];
+            words[words.length - 1] = tmp;
+        }
+        p.setName(String.join(" ", words));
+
+        // Sửa số lượng: đảo ngược các chữ số
+        int q = p.getQuantity();
+        boolean neg = q < 0;
+        String rev = new StringBuilder(String.valueOf(Math.abs(q))).reverse().toString();
+        int newQ = Integer.parseInt(rev);
+        p.setQuantity(neg ? -newQ : newQ);
+        System.out.println("Sau khi sua:   " + p);
+
+        // Gửi: 8 byte requestId + object đã sửa
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        baos.write(reqIdBytes);
+        ObjectOutputStream oos = new ObjectOutputStream(baos);
+        oos.writeObject(p);
+        oos.flush();
+        byte[] resp = baos.toByteArray();
+        socket.send(new DatagramPacket(resp, resp.length, addr, port));
+
+        socket.close();
+    }
+}
+
+Đề 3. Giải mã URL query string, sắp key (cổng 2208, hai pha)
+import java.net.*;
+import java.util.*;
+
+public class Bai3 {
+    public static void main(String[] args) throws Exception {
+        String host = "203.162.10.109";
+        int port = 2208;
+        String studentCode = "B23DCCN517";
+        String qCode = "XXXXXXXX"; // điền mã câu hỏi thật
+
+        DatagramSocket socket = new DatagramSocket();
+        socket.setSoTimeout(5000);
+        InetAddress addr = InetAddress.getByName(host);
+
+        // a. Gửi ;studentCode;qCode
+        byte[] out = (";" + studentCode + ";" + qCode).getBytes("UTF-8");
+        socket.send(new DatagramPacket(out, out.length, addr, port));
+
+        // b. Nhận requestId;data
+        byte[] buf = new byte[65507];
+        DatagramPacket in = new DatagramPacket(buf, buf.length);
+        socket.receive(in);
+        String received = new String(in.getData(), 0, in.getLength(), "UTF-8").trim();
+        System.out.println("Nhan: " + received);
+
+        String[] parts = received.split(";", 2);
+        String requestId = parts[0];
+        String data = parts.length > 1 ? parts[1] : "";
+
+        // c. Tách, giải mã, sắp xếp theo key
+        List<String[]> pairs = new ArrayList<>();
+        if (!data.isEmpty()) {
+            for (String kv : data.split("&")) {
+                if (kv.isEmpty()) continue;
+                int idx = kv.indexOf('=');
+                String k = idx >= 0 ? kv.substring(0, idx) : kv;
+                String v = idx >= 0 ? kv.substring(idx + 1) : "";
+                k = URLDecoder.decode(k, "UTF-8");
+                v = URLDecoder.decode(v, "UTF-8");
+                pairs.add(new String[]{k, v});
+            }
+        }
+        // sort ổn định, nếu trùng key vẫn giữ thứ tự xuất hiện ban đầu
+        pairs.sort((a, b) -> a[0].compareTo(b[0]));
+
+        // d. Ghép key=value;key=value
+        StringBuilder sb = new StringBuilder(requestId);
+        for (String[] p : pairs) {
+            sb.append(";").append(p[0]).append("=").append(p[1]);
+        }
+        String result = sb.toString();
+
+        byte[] resp = result.getBytes("UTF-8");
+        socket.send(new DatagramPacket(resp, resp.length, addr, port));
+        System.out.println("Gui: " + result);
+
+        // e. Đóng socket
+        socket.close();
+    }
+}
+
+Đề 4. Phân vị 90 và số phần tử lớn hơn trung bình (cổng 2207, hai pha)
+import java.net.*;
+import java.util.*;
+
+public class Bai4 {
+    public static void main(String[] args) throws Exception {
+        String host = "203.162.10.109";
+        int port = 2207;
+        String studentCode = "B23DCCN517";
+        String qCode = "XXXXXXXX"; // điền mã câu hỏi thật
+
+        DatagramSocket socket = new DatagramSocket();
+        socket.setSoTimeout(5000);
+        InetAddress addr = InetAddress.getByName(host);
+
+        // a. Gửi ;studentCode;qCode
+        byte[] out = (";" + studentCode + ";" + qCode).getBytes("UTF-8");
+        socket.send(new DatagramPacket(out, out.length, addr, port));
+
+        // b. Nhận requestId;data
+        byte[] buf = new byte[65507];
+        DatagramPacket in = new DatagramPacket(buf, buf.length);
+        socket.receive(in);
+        String received = new String(in.getData(), 0, in.getLength(), "UTF-8").trim();
+        System.out.println("Nhan: " + received);
+
+        String[] parts = received.split(";", 2);
+        String requestId = parts[0];
+        String data = parts[1];
+
+        // c. Parse dãy số
+        String[] tokens = data.split(",");
+        long[] arr = new long[tokens.length];
+        for (int i = 0; i < tokens.length; i++) {
+            arr[i] = Long.parseLong(tokens[i].trim());
+        }
+        int n = arr.length;
+
+        // Trung bình của dãy ban đầu (so sánh chính xác bằng sum, không dùng số thực)
+        long sum = 0;
+        for (long v : arr) sum += v;
+        int above = 0;
+        for (long v : arr) {
+            if ((double) v * n > sum) above++;   // v > sum/n
+        }
+
+        // Sắp xếp và lấy phân vị 90
+        long[] sorted = arr.clone();
+        Arrays.sort(sorted);
+        int idx = (int) Math.ceil(n * 0.9) - 1;
+        long p90 = sorted[idx];
+
+        // d. Nộp kết quả
+        String result = requestId + ";p90=" + p90 + ";aboveAvg=" + above;
+        byte[] resp = result.getBytes("UTF-8");
+        socket.send(new DatagramPacket(resp, resp.length, addr, port));
+        System.out.println("Gui: " + result);
+
+        // e. Đóng socket
+        socket.close();
+    }
+}
+
+Đề 5. PricedProduct, tính finalPrice có phí fee (cổng 2209)
+package UDP;
+
+import java.io.*;
+import java.net.*;
+import java.util.Arrays;
+
+class PricedProduct implements Serializable {
+    private static final long serialVersionUID = 20260517L;
+
+    private String id;
+    private String name;
+    private double basePrice;
+    private double taxRate;
+    private double discountRate;
+    private double finalPrice;
+
+    public PricedProduct() { }
+
+    public PricedProduct(String id, String name, double basePrice, double taxRate, double discountRate) {
+        this.id = id;
+        this.name = name;
+        this.basePrice = basePrice;
+        this.taxRate = taxRate;
+        this.discountRate = discountRate;
+    }
+
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public double getBasePrice() { return basePrice; }
+    public void setBasePrice(double basePrice) { this.basePrice = basePrice; }
+    public double getTaxRate() { return taxRate; }
+    public void setTaxRate(double taxRate) { this.taxRate = taxRate; }
+    public double getDiscountRate() { return discountRate; }
+    public void setDiscountRate(double discountRate) { this.discountRate = discountRate; }
+    public double getFinalPrice() { return finalPrice; }
+    public void setFinalPrice(double finalPrice) { this.finalPrice = finalPrice; }
+
+    @Override
+    public String toString() {
+        return id + " | " + name + " | base=" + basePrice + " | tax=" + taxRate
+                + " | discount=" + discountRate + " | final=" + finalPrice;
+    }
+}
+
+public class Bai5 {
+    public static void main(String[] args) throws Exception {
+        String host = "203.162.10.109";
+        int port = 2209;
+        String studentCode = "B23DCCN517";
+        String qCode = "XXXXXXXX"; // điền mã câu hỏi thật
+
+        DatagramSocket socket = new DatagramSocket();
+        socket.setSoTimeout(5000);
+        InetAddress addr = InetAddress.getByName(host);
+
+        // a. Gửi ;studentCode;qCode
+        byte[] out = (";" + studentCode + ";" + qCode).getBytes("UTF-8");
+        socket.send(new DatagramPacket(out, out.length, addr, port));
+
+        // b. Nhận: 8 byte requestId + object
+        byte[] buf = new byte[65507];
+        DatagramPacket in = new DatagramPacket(buf, buf.length);
+        socket.receive(in);
+
+        byte[] data = Arrays.copyOf(in.getData(), in.getLength());
+        byte[] reqIdBytes = Arrays.copyOfRange(data, 0, 8);
+
+        ObjectInputStream ois = new ObjectInputStream(
+                new ByteArrayInputStream(data, 8, data.length - 8));
+        PricedProduct p = (PricedProduct) ois.readObject();
+        ois.close();
+        System.out.println("Truoc: " + p);
+
+        // c. Tính finalPrice (đề 5: có fee)
+        double fee = p.getBasePrice() >= 1000 ? 25 : 0;
+        double price = p.getBasePrice()
+                * (1 + p.getTaxRate() / 100.0)
+                * (1 - p.getDiscountRate() / 100.0)
+                + fee;
+        p.setFinalPrice(Math.round(price * 100.0) / 100.0);
+        System.out.println("Sau:   " + p);
+
+        // d. Gửi 8 byte requestId + object đã cập nhật
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        baos.write(reqIdBytes);
+        ObjectOutputStream oos = new ObjectOutputStream(baos);
+        oos.writeObject(p);
+        oos.flush();
+        byte[] resp = baos.toByteArray();
+        socket.send(new DatagramPacket(resp, resp.length, addr, port));
+
+        // e. Đóng socket
+        socket.close();
+    }
+}
+
+Đề 6. Đoạn con tăng nghiêm ngặt dài nhất (cổng 2207, hai pha)
+import java.net.*;
+
+public class Bai6 {
+    public static void main(String[] args) throws Exception {
+        String host = "203.162.10.109";
+        int port = 2207;
+        String studentCode = "B23DCCN517";
+        String qCode = "XXXXXXXX"; // điền mã câu hỏi thật
+
+        DatagramSocket socket = new DatagramSocket();
+        socket.setSoTimeout(5000);
+        InetAddress addr = InetAddress.getByName(host);
+
+        // a. Gửi ;studentCode;qCode
+        byte[] out = (";" + studentCode + ";" + qCode).getBytes("UTF-8");
+        socket.send(new DatagramPacket(out, out.length, addr, port));
+
+        // b. Nhận requestId;data
+        byte[] buf = new byte[65507];
+        DatagramPacket in = new DatagramPacket(buf, buf.length);
+        socket.receive(in);
+        String received = new String(in.getData(), 0, in.getLength(), "UTF-8").trim();
+        System.out.println("Nhan: " + received);
+
+        String[] parts = received.split(";", 2);
+        String requestId = parts[0];
+        String[] tokens = parts[1].split(",");
+        long[] arr = new long[tokens.length];
+        for (int i = 0; i < tokens.length; i++) {
+            arr[i] = Long.parseLong(tokens[i].trim());
+        }
+
+        // c. Tìm đoạn con tăng nghiêm ngặt dài nhất (xuất hiện trước nếu bằng nhau)
+        int bestStart = 0, bestLen = 1;
+        int curStart = 0;
+        for (int i = 1; i < arr.length; i++) {
+            if (arr[i] > arr[i - 1]) {
+                int curLen = i - curStart + 1;
+                if (curLen > bestLen) {
+                    bestLen = curLen;
+                    bestStart = curStart;
+                }
+            } else {
+                curStart = i;
+            }
+        }
+
+        StringBuilder seg = new StringBuilder();
+        long sum = 0;
+        for (int i = bestStart; i < bestStart + bestLen; i++) {
+            if (i > bestStart) seg.append(",");
+            seg.append(arr[i]);
+            sum += arr[i];
+        }
+
+        // d. Nộp kết quả
+        String result = requestId + ";segment=" + seg + ";length=" + bestLen + ";sum=" + sum;
+        byte[] resp = result.getBytes("UTF-8");
+        socket.send(new DatagramPacket(resp, resp.length, addr, port));
+        System.out.println("Gui: " + result);
+
+        // e. Đóng socket
+        socket.close();
+    }
+}
+
+Đề 7. Loại ký tự đặc biệt, số, ký tự trùng (cổng 2208)
+import java.net.*;
+import java.util.*;
+
+public class Bai7 {
+    public static void main(String[] args) throws Exception {
+        String host = "203.162.10.109";
+        int port = 2208;
+        String studentCode = "B23DCCN517";
+        String qCode = "XXXXXXXX"; // điền mã câu hỏi thật
+
+        DatagramSocket socket = new DatagramSocket();
+        socket.setSoTimeout(5000);
+        InetAddress addr = InetAddress.getByName(host);
+
+        // a. Gửi ;studentCode;qCode
+        byte[] out = (";" + studentCode + ";" + qCode).getBytes("UTF-8");
+        socket.send(new DatagramPacket(out, out.length, addr, port));
+
+        // b. Nhận requestId;strInput
+        byte[] buf = new byte[65507];
+        DatagramPacket in = new DatagramPacket(buf, buf.length);
+        socket.receive(in);
+        String received = new String(in.getData(), 0, in.getLength(), "UTF-8").trim();
+        System.out.println("Nhan: " + received);
+
+        String[] parts = received.split(";", 2);
+        String requestId = parts[0];
+        String strInput = parts.length > 1 ? parts[1] : "";
+
+        // c. Chỉ giữ chữ cái, bỏ ký tự trùng, giữ thứ tự
+        Set<Character> seen = new HashSet<>();
+        StringBuilder sb = new StringBuilder();
+        for (char c : strInput.toCharArray()) {
+            if (Character.isLetter(c) && seen.add(c)) {
+                sb.append(c);
+            }
+        }
+        String strOutput = sb.toString();
+
+        String result = requestId + ";" + strOutput;
+        byte[] resp = result.getBytes("UTF-8");
+        socket.send(new DatagramPacket(resp, resp.length, addr, port));
+        System.out.println("Gui: " + result);
+
+        // d. Đóng socket
+        socket.close();
+    }
+}
+
+Đề 8. Employee, chuẩn hóa name, tăng lương x%, đổi hireDate (cổng 2209)
+package UDP;
+
+import java.io.*;
+import java.net.*;
+import java.util.Arrays;
+
+class Employee implements Serializable {
+    private static final long serialVersionUID = 20261107L;
+
+    private String id;
+    private String name;
+    private double salary;
+    private String hireDate;
+
+    public Employee(String id, String name, double salary, String hireDate) {
+        this.id = id;
+        this.name = name;
+        this.salary = salary;
+        this.hireDate = hireDate;
+    }
+
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public double getSalary() { return salary; }
+    public void setSalary(double salary) { this.salary = salary; }
+    public String getHireDate() { return hireDate; }
+    public void setHireDate(String hireDate) { this.hireDate = hireDate; }
+
+    @Override
+    public String toString() {
+        return id + " | " + name + " | " + salary + " | " + hireDate;
+    }
+}
+
+public class Bai8 {
+    public static void main(String[] args) throws Exception {
+        String host = "203.162.10.109";
+        int port = 2209;
+        String studentCode = "B23DCCN517";
+        String qCode = "XXXXXXXX"; // điền mã câu hỏi thật
+
+        DatagramSocket socket = new DatagramSocket();
+        socket.setSoTimeout(5000);
+        InetAddress addr = InetAddress.getByName(host);
+
+        // a. Gửi ;studentCode;qCode
+        byte[] out = (";" + studentCode + ";" + qCode).getBytes("UTF-8");
+        socket.send(new DatagramPacket(out, out.length, addr, port));
+
+        // b. Nhận: 8 byte requestId + object Employee
+        byte[] buf = new byte[65507];
+        DatagramPacket in = new DatagramPacket(buf, buf.length);
+        socket.receive(in);
+
+        byte[] data = Arrays.copyOf(in.getData(), in.getLength());
+        byte[] reqIdBytes = Arrays.copyOfRange(data, 0, 8);
+
+        ObjectInputStream ois = new ObjectInputStream(
+                new ByteArrayInputStream(data, 8, data.length - 8));
+        Employee e = (Employee) ois.readObject();
+        ois.close();
+        System.out.println("Truoc: " + e);
+
+        // c1. Chuẩn hóa name: hoa chữ đầu mỗi từ, còn lại thường
+        String[] words = e.getName().trim().split("\\s+");
+        StringBuilder nameSb = new StringBuilder();
+        for (String w : words) {
+            if (w.isEmpty()) continue;
+            if (nameSb.length() > 0) nameSb.append(" ");
+            nameSb.append(Character.toUpperCase(w.charAt(0)))
+                  .append(w.substring(1).toLowerCase());
+        }
+        e.setName(nameSb.toString());
+
+        // c2. Tăng lương x%, x = tổng các chữ số của năm trong hireDate
+        String[] d = e.getHireDate().trim().split("-");   // yyyy-mm-dd
+        String year = d[0];
+        int x = 0;
+        for (char c : year.toCharArray()) {
+            if (Character.isDigit(c)) x += c - '0';
+        }
+        double newSalary = e.getSalary() * (1 + x / 100.0);
+        e.setSalary(Math.round(newSalary * 100.0) / 100.0);
+
+        // c3. Đổi hireDate sang dd/mm/yyyy
+        e.setHireDate(d[2] + "/" + d[1] + "/" + d[0]);
+        System.out.println("Sau:   " + e);
+
+        // d. Gửi 8 byte requestId + object đã cập nhật
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        baos.write(reqIdBytes);
+        ObjectOutputStream oos = new ObjectOutputStream(baos);
+        oos.writeObject(e);
+        oos.flush();
+        byte[] resp = baos.toByteArray();
+        socket.send(new DatagramPacket(resp, resp.length, addr, port));
+
+        // e. Đóng socket
+        socket.close();
+    }
+}
+
+Đề 9. PricedProduct, tính finalPrice không có fee (cổng 2209)
+Bạn có thể dùng lại nguyên file UDP/PricedProduct.java của đề 5
+package UDP;
+
+import java.io.*;
+import java.net.*;
+import java.util.Arrays;
+
+class PricedProduct implements Serializable {
+    private static final long serialVersionUID = 20260517L;
+
+    private String id;
+    private String name;
+    private double basePrice;
+    private double taxRate;
+    private double discountRate;
+    private double finalPrice;
+
+    public PricedProduct() { }
+
+    public PricedProduct(String id, String name, double basePrice, double taxRate, double discountRate) {
+        this.id = id;
+        this.name = name;
+        this.basePrice = basePrice;
+        this.taxRate = taxRate;
+        this.discountRate = discountRate;
+    }
+
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public double getBasePrice() { return basePrice; }
+    public void setBasePrice(double basePrice) { this.basePrice = basePrice; }
+    public double getTaxRate() { return taxRate; }
+    public void setTaxRate(double taxRate) { this.taxRate = taxRate; }
+    public double getDiscountRate() { return discountRate; }
+    public void setDiscountRate(double discountRate) { this.discountRate = discountRate; }
+    public double getFinalPrice() { return finalPrice; }
+    public void setFinalPrice(double finalPrice) { this.finalPrice = finalPrice; }
+
+    @Override
+    public String toString() {
+        return id + " | " + name + " | base=" + basePrice + " | tax=" + taxRate
+                + " | discount=" + discountRate + " | final=" + finalPrice;
+    }
+}
+
+public class Bai9 {
+    public static void main(String[] args) throws Exception {
+        String host = "203.162.10.109";
+        int port = 2209;
+        String studentCode = "B23DCCN517";
+        String qCode = "XXXXXXXX"; // điền mã câu hỏi thật
+
+        DatagramSocket socket = new DatagramSocket();
+        socket.setSoTimeout(5000);
+        InetAddress addr = InetAddress.getByName(host);
+
+        // a. Gửi ;studentCode;qCode
+        byte[] out = (";" + studentCode + ";" + qCode).getBytes("UTF-8");
+        socket.send(new DatagramPacket(out, out.length, addr, port));
+
+        // b. Nhận: 8 byte requestId + object PricedProduct
+        byte[] buf = new byte[65507];
+        DatagramPacket in = new DatagramPacket(buf, buf.length);
+        socket.receive(in);
+
+        byte[] data = Arrays.copyOf(in.getData(), in.getLength());
+        byte[] reqIdBytes = Arrays.copyOfRange(data, 0, 8);
+
+        ObjectInputStream ois = new ObjectInputStream(
+                new ByteArrayInputStream(data, 8, data.length - 8));
+        PricedProduct p = (PricedProduct) ois.readObject();
+        ois.close();
+        System.out.println("Truoc: " + p);
+
+        // c. finalPrice = round2(basePrice * (1 + tax/100) * (1 - discount/100))
+        double price = p.getBasePrice()
+                * (1 + p.getTaxRate() / 100.0)
+                * (1 - p.getDiscountRate() / 100.0);
+        p.setFinalPrice(Math.round(price * 100.0) / 100.0);
+        System.out.println("Sau:   " + p);
+
+        // d. Gửi 8 byte requestId + object đã cập nhật
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        baos.write(reqIdBytes);
+        ObjectOutputStream oos = new ObjectOutputStream(baos);
+        oos.writeObject(p);
+        oos.flush();
+        byte[] resp = baos.toByteArray();
+        socket.send(new DatagramPacket(resp, resp.length, addr, port));
+
+        // e. Đóng socket
+        socket.close();
+    }
+}
+
+Đề 10. Tìm giá trị còn thiếu, dãy có thể trùng (cổng 2207)
+import java.net.*;
+import java.util.*;
+
+public class Bai10 {
+    public static void main(String[] args) throws Exception {
+        String host = "203.162.10.109";
+        int port = 2207;
+        String studentCode = "B23DCCN517";
+        String qCode = "XXXXXXXX"; // điền mã câu hỏi thật
+
+        DatagramSocket socket = new DatagramSocket();
+        socket.setSoTimeout(5000);
+        InetAddress addr = InetAddress.getByName(host);
+
+        // a. Gửi ;studentCode;qCode
+        byte[] out = (";" + studentCode + ";" + qCode).getBytes("UTF-8");
+        socket.send(new DatagramPacket(out, out.length, addr, port));
+
+        // b. Nhận requestId;n;A1,A2,...
+        byte[] buf = new byte[65507];
+        DatagramPacket in = new DatagramPacket(buf, buf.length);
+        socket.receive(in);
+        String received = new String(in.getData(), 0, in.getLength(), "UTF-8").trim();
+        System.out.println("Nhan: " + received);
+
+        String[] parts = received.split(";", 3);
+        String requestId = parts[0];
+        int n = Integer.parseInt(parts[1].trim());
+
+        boolean[] present = new boolean[n + 1];
+        if (parts.length > 2 && !parts[2].trim().isEmpty()) {
+            for (String t : parts[2].split(",")) {
+                t = t.trim();
+                if (t.isEmpty()) continue;
+                int v = Integer.parseInt(t);
+                if (v >= 1 && v <= n) present[v] = true;
+            }
+        }
+
+        // c. Tìm các giá trị còn thiếu trong 1..n
+        StringBuilder sb = new StringBuilder();
+        for (int i = 1; i <= n; i++) {
+            if (!present[i]) {
+                if (sb.length() > 0) sb.append(",");
+                sb.append(i);
+            }
+        }
+
+        String result = requestId + ";" + sb;
+        byte[] resp = result.getBytes("UTF-8");
+        socket.send(new DatagramPacket(resp, resp.length, addr, port));
+        System.out.println("Gui: " + result);
+
+        // d. Đóng socket
+        socket.close();
+    }
+}
+
+/**
+ * Đề 11: UDP.Book, chuẩn hóa title, author, ISBN, publishDate (cổng 2209)
+ * - Gửi: ;studentCode;qCode
+ * - Nhận: 8 byte requestId, đối tượng Book
+ * - Xử lý: 
+ *     + Chuẩn hóa title: viết hoa chữ cái đầu của mỗi từ.
+ *     + Chuẩn hóa author: định dạng "HỌ, Tên" (Họ viết hoa, Tên viết hoa chữ cái đầu).
+ *     + Chuẩn hóa mã ISBN: định dạng "978-3-16-148410-0" (XXX-X-XX-XXXXXX-X).
+ *     + Chuyển publishDate: yyyy-mm-dd sang mm/yyyy.
+ * - Gửi lại: 8 byte requestId, đối tượng Book đã cập nhật.
+ */
+
+import java.io.*;
+import java.net.*;
+
+public class Bai11 {
+    public static void main(String[] args) throws Exception {
+        DatagramSocket socket = new DatagramSocket();
+        socket.setSoTimeout(5000);
+        InetAddress serverAddress = InetAddress.getByName("api.ptit.store");
+        int port = 2209;
+
+        // 1. Gửi
+        String sendStr = ";B23DCCN643;qCode11"; // Thay qCode thực tế khi thi
+        byte[] sendData = sendStr.getBytes();
+        DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, serverAddress, port);
+        socket.send(sendPacket);
+
+        // 2. Nhận
+        byte[] receiveData = new byte[4096];
+        DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
+        socket.receive(receivePacket);
+
+        String requestId = new String(receivePacket.getData(), 0, 8);
+
+        ByteArrayInputStream bais = new ByteArrayInputStream(receivePacket.getData(), 8, receivePacket.getLength() - 8);
+        ObjectInputStream ois = new ObjectInputStream(bais);
+        Book book = (Book) ois.readObject();
+
+        // 3. Xử lý dữ liệu
+        // Chuẩn hóa title
+        String[] wTitle = book.getTitle().trim().toLowerCase().split("\\s+");
+        StringBuilder newTitle = new StringBuilder();
+        for (String w : wTitle) {
+            if (w.length() > 0) newTitle.append(Character.toUpperCase(w.charAt(0))).append(w.substring(1)).append(" ");
+        }
+        book.setTitle(newTitle.toString().trim());
+
+        // Chuẩn hóa author (HỌ, Tên)
+        String[] wAuthor = book.getAuthor().trim().toLowerCase().split("\\s+");
+        if (wAuthor.length > 0) {
+            String ho = wAuthor[0].toUpperCase();
+            StringBuilder ten = new StringBuilder();
+            for (int i = 1; i < wAuthor.length; i++) {
+                if (wAuthor[i].length() > 0) {
+                    ten.append(Character.toUpperCase(wAuthor[i].charAt(0))).append(wAuthor[i].substring(1)).append(" ");
+                }
+            }
+            book.setAuthor(ho + ", " + ten.toString().trim());
+        }
+
+        // Chuẩn hóa ISBN 
+        String isbn = book.getIsbn().replaceAll("[^0-9]", "");
+        if (isbn.length() == 13) {
+            isbn = isbn.substring(0, 3) + "-" + isbn.substring(3, 4) + "-" + isbn.substring(4, 6) + "-" + isbn.substring(6, 12) + "-" + isbn.substring(12);
+        }
+        book.setIsbn(isbn);
+
+        // Chuyển ngày yyyy-mm-dd -> mm/yyyy
+        String[] dateParts = book.getPublishDate().split("-");
+        if (dateParts.length == 3) {
+            book.setPublishDate(dateParts[1] + "/" + dateParts[0]);
+        }
+
+        // 4. Gửi kết quả
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ObjectOutputStream oos = new ObjectOutputStream(baos);
+        oos.writeObject(book);
+        oos.flush();
+        byte[] objData = baos.toByteArray();
+
+        byte[] reqBytes = requestId.getBytes();
+        byte[] resultData = new byte[8 + objData.length];
+        System.arraycopy(reqBytes, 0, resultData, 0, 8);
+        System.arraycopy(objData, 0, resultData, 8, objData.length);
+
+        DatagramPacket resultPacket = new DatagramPacket(resultData, resultData.length, receivePacket.getAddress(), receivePacket.getPort());
+        socket.send(resultPacket);
+        
+        socket.close();
+    }
+}
+
+class Book implements Serializable {
+    private static final long serialVersionUID = 20251107L;
+    private String id;
+    private String title;
+    private String author;
+    private String isbn;
+    private String publishDate;
+
+    public Book(String id, String title, String author, String isbn, String publishDate) {
+        this.id = id;
+        this.title = title;
+        this.author = author;
+        this.isbn = isbn;
+        this.publishDate = publishDate;
+    }
+
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
+    public String getAuthor() { return author; }
+    public void setAuthor(String author) { this.author = author; }
+    public String getIsbn() { return isbn; }
+    public void setIsbn(String isbn) { this.isbn = isbn; }
+    public String getPublishDate() { return publishDate; }
+    public void setPublishDate(String publishDate) { this.publishDate = publishDate; }
+}
+
+/**
+ * Đề 12: Cộng hai số nhị phân, đổi ra thập phân (cổng 2208)
+ * - Gửi: ;studentCode;qCode
+ * - Nhận: requestId;b1,b2 (b1, b2 là chuỗi nhị phân)
+ * - Xử lý: Tính tổng 2 số nhị phân và đổi ra số thập phân (hệ cơ số 10).
+ * - Gửi lại: requestId;sum
+ */
+
+import java.net.*;
+
+public class Bai12 {
+    public static void main(String[] args) throws Exception {
+        DatagramSocket socket = new DatagramSocket();
+        socket.setSoTimeout(5000);
+        InetAddress serverAddress = InetAddress.getByName("api.ptit.store");
+        int port = 2208;
+
+        // 1. Gửi
+        String sendStr = ";B23DCCN643;qCode12"; 
+        byte[] sendData = sendStr.getBytes();
+        DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, serverAddress, port);
+        socket.send(sendPacket);
+
+        // 2. Nhận
+        byte[] receiveData = new byte[4096];
+        DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
+        socket.receive(receivePacket);
+        String receiveStr = new String(receivePacket.getData(), 0, receivePacket.getLength(), "UTF-8");
+
+        // 3. Xử lý
+        String[] parts = receiveStr.trim().split(";");
+        String requestId = parts[0];
+        String[] binaryStrs = parts[1].split(",");
+        
+        // Parse nhị phân (hệ cơ số 2) sang Long và tính tổng
+        long sum = Long.parseLong(binaryStrs[0].trim(), 2) + Long.parseLong(binaryStrs[1].trim(), 2);
+
+        // 4. Gửi kết quả
+        String resultStr = requestId + ";" + sum;
+        byte[] resultData = resultStr.getBytes();
+        DatagramPacket resultPacket = new DatagramPacket(resultData, resultData.length, receivePacket.getAddress(), receivePacket.getPort());
+        socket.send(resultPacket);
+        
+        socket.close();
+    }
+}
+
+/**
+ * Đề 13: Che log và đếm ERROR/INFO/WARN (cổng 2208, hai pha)
+ * - Gửi: ;studentCode;qCode
+ * - Nhận: requestId;data (nhiều dòng log nối bằng ||)
+ * - Xử lý: Che email, số điện thoại, token. Đếm dòng bắt đầu bằng ERROR, INFO, WARN.
+ * - Gửi lại: requestId;maskedLog##ERROR=n;INFO=n;WARN=n
+ */
+
+import java.net.*;
+
+public class Bai13 {
+    public static void main(String[] args) throws Exception {
+        DatagramSocket socket = new DatagramSocket();
+        socket.setSoTimeout(5000);
+        InetAddress serverAddress = InetAddress.getByName("api.ptit.store");
+        int port = 2208;
+
+        // 1. Gửi
+        String sendStr = ";B23DCCN643;qCode13"; 
+        byte[] sendData = sendStr.getBytes();
+        DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, serverAddress, port);
+        socket.send(sendPacket);
+
+        // 2. Nhận
+        byte[] receiveData = new byte[4096];
+        DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
+        socket.receive(receivePacket);
+        String receiveStr = new String(receivePacket.getData(), 0, receivePacket.getLength(), "UTF-8");
+
+        // 3. Xử lý
+        String[] parts = receiveStr.trim().split(";", 2);
+        String requestId = parts[0];
+        String[] lines = parts[1].trim().split("\\|\\|");
+        
+        int error = 0, info = 0, warn = 0;
+        StringBuilder maskedLog = new StringBuilder();
+
+        for (String line : lines) {
+            if (line.startsWith("ERROR")) error++;
+            else if (line.startsWith("INFO")) info++;
+            else if (line.startsWith("WARN")) warn++;
+
+            // Dùng Regex để che giấu thông tin
+            line = line.replaceAll("email=\\S+", "email=[EMAIL]")
+                       .replaceAll("phone=\\S+", "phone=[PHONE]")
+                       .replaceAll("token=\\S+", "token=[TOKEN]");
+            
+            maskedLog.append("||").append(line);
+        }
+        
+        String finalMasked = maskedLog.toString().replaceFirst("\\|\\|", "");
+        String resultStr = requestId + ";" + finalMasked + "##ERROR=" + error + ";INFO=" + info + ";WARN=" + warn;
+
+        // 4. Gửi kết quả
+        byte[] resultData = resultStr.getBytes("UTF-8");
+        DatagramPacket resultPacket = new DatagramPacket(resultData, resultData.length, receivePacket.getAddress(), receivePacket.getPort());
+        socket.send(resultPacket);
+        
+        socket.close();
+    }
+}
+
+/**
+ * Đề 14: Tìm giá trị còn thiếu, dãy liên tiếp không trùng (cổng 2207)
+ * - Gửi: ;studentCode;qCode
+ * - Nhận: requestId;n;A1,A2,...Am (n <= 100, m <= n)
+ * - Xử lý: Tìm các giá trị còn thiếu trong khoảng từ 1 đến n (giống Bài 10).
+ * - Gửi lại: requestId;B1,B2,...,Bk
+ */
+
+import java.net.*;
+import java.util.*;
+
+public class Bai14 {
+    public static void main(String[] args) throws Exception {
+        DatagramSocket socket = new DatagramSocket();
+        socket.setSoTimeout(5000);
+        InetAddress serverAddress = InetAddress.getByName("api.ptit.store");
+        int port = 2207;
+
+        // 1. Gửi
+        String sendStr = ";B23DCCN643;qCode14"; 
+        byte[] sendData = sendStr.getBytes();
+        DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, serverAddress, port);
+        socket.send(sendPacket);
+
+        // 2. Nhận
+        byte[] receiveData = new byte[4096];
+        DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
+        socket.receive(receivePacket);
+        String receiveStr = new String(receivePacket.getData(), 0, receivePacket.getLength(), "UTF-8");
+
+        // 3. Xử lý
+        String[] parts = receiveStr.trim().split(";");
+        String requestId = parts[0];
+        int n = Integer.parseInt(parts[1].trim());
+        String[] arrStrs = parts[2].trim().split(",");
+        
+        Set<Integer> presentSet = new HashSet<>();
+        for (String s : arrStrs) {
+            presentSet.add(Integer.parseInt(s.trim()));
+        }
+
+        List<String> missing = new ArrayList<>();
+        for (int i = 1; i <= n; i++) {
+            if (!presentSet.contains(i)) {
+                missing.add(String.valueOf(i));
+            }
+        }
+
+        // 4. Gửi kết quả
+        String resultStr = requestId + ";" + String.join(",", missing);
+        byte[] resultData = resultStr.getBytes();
+        DatagramPacket resultPacket = new DatagramPacket(resultData, resultData.length, receivePacket.getAddress(), receivePacket.getPort());
+        socket.send(resultPacket);
+        
+        socket.close();
+    }
+}
+
+/**
+ * Đề 15: Employee, tăng lương cố định 8% (cổng 2209)
+ * - Gửi: ;studentCode;qCode
+ * - Nhận: 8 byte requestId, đối tượng Employee
+ * - Xử lý: Chuẩn hóa name (Viết hoa chữ đầu mỗi từ). Tăng salary thêm 8%, làm tròn 2 chữ số. Giữ nguyên id và hireDate.
+ * - Gửi lại: 8 byte requestId, đối tượng Employee đã cập nhật.
+ */
+
+import java.io.*;
+import java.net.*;
+
+public class Bai15 {
+    public static void main(String[] args) throws Exception {
+        DatagramSocket socket = new DatagramSocket();
+        socket.setSoTimeout(5000);
+        InetAddress serverAddress = InetAddress.getByName("api.ptit.store");
+        int port = 2209;
+
+        // 1. Gửi
+        String sendStr = ";B23DCCN643;qCode15"; 
+        byte[] sendData = sendStr.getBytes();
+        DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, serverAddress, port);
+        socket.send(sendPacket);
+
+        // 2. Nhận
+        byte[] receiveData = new byte[4096];
+        DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
+        socket.receive(receivePacket);
+
+        String requestId = new String(receivePacket.getData(), 0, 8);
+
+        ByteArrayInputStream bais = new ByteArrayInputStream(receivePacket.getData(), 8, receivePacket.getLength() - 8);
+        ObjectInputStream ois = new ObjectInputStream(bais);
+        Employee employee = (Employee) ois.readObject();
+
+        // 3. Xử lý dữ liệu
+        // Chuẩn hóa tên
+        String[] words = employee.getName().trim().toLowerCase().split("\\s+");
+        StringBuilder normalizedName = new StringBuilder();
+        for (String w : words) {
+            if (w.length() > 0) {
+                normalizedName.append(Character.toUpperCase(w.charAt(0))).append(w.substring(1)).append(" ");
+            }
+        }
+        employee.setName(normalizedName.toString().trim());
+
+        // Tăng lương thêm 8%
+        double newSalary = employee.getSalary() * 1.08;
+        newSalary = Math.round(newSalary * 100.0) / 100.0;
+        employee.setSalary(newSalary);
+
+        // 4. Gửi kết quả
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ObjectOutputStream oos = new ObjectOutputStream(baos);
+        oos.writeObject(employee);
+        oos.flush();
+        byte[] objData = baos.toByteArray();
+
+        byte[] reqBytes = requestId.getBytes();
+        byte[] resultData = new byte[8 + objData.length];
+        System.arraycopy(reqBytes, 0, resultData, 0, 8);
+        System.arraycopy(objData, 0, resultData, 8, objData.length);
+
+        DatagramPacket resultPacket = new DatagramPacket(resultData, resultData.length, receivePacket.getAddress(), receivePacket.getPort());
+        socket.send(resultPacket);
+        
+        socket.close();
+    }
+}
+
+// Lưu ý: Do trong project có thể đã tồn tại class Employee (từ bài 8)
+// Hãy đảm bảo class này giống hệt trên server theo mô tả.
+class Employee implements Serializable {
+    private static final long serialVersionUID = 20261107L;
+    private String id;
+    private String name;
+    private double salary;
+    private String hireDate;
+
+    public Employee(String id, String name, double salary, String hireDate) {
+        this.id = id;
+        this.name = name;
+        this.salary = salary;
+        this.hireDate = hireDate;
+    }
+
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public double getSalary() { return salary; }
+    public void setSalary(double salary) { this.salary = salary; }
+    public String getHireDate() { return hireDate; }
+    public void setHireDate(String hireDate) { this.hireDate = hireDate; }
+}
+
+/**
+ * Đề 16: Tìm trung vị (cổng 2207, hai pha)
+ * - Gửi: ;studentCode;qCode
+ * - Nhận: requestId;data (ví dụ: SjkZFpBk;268,125,584,33,685,530,661...)
+ * - Xử lý: Sắp xếp dãy số tăng dần và tìm giá trị trung vị. Nếu số lượng phần tử chẵn, 
+ *          lấy trung bình hai phần tử giữa và làm tròn 02 chữ số thập phân.
+ * - Gửi lại: requestId;answer
+ */
+
+import java.net.*;
+import java.util.*;
+
+public class Bai16 {
+    public static void main(String[] args) throws Exception {
+        DatagramSocket socket = new DatagramSocket();
+        socket.setSoTimeout(5000);
+        InetAddress serverAddress = InetAddress.getByName("api.ptit.store");
+        int port = 2207;
+
+        // 1. Gửi
+        String sendStr = ";B23DCCN643;qCode16"; 
+        byte[] sendData = sendStr.getBytes();
+        DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, serverAddress, port);
+        socket.send(sendPacket);
+
+        // 2. Nhận
+        byte[] receiveData = new byte[4096];
+        DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
+        socket.receive(receivePacket);
+        String receiveStr = new String(receivePacket.getData(), 0, receivePacket.getLength(), "UTF-8");
+
+        // 3. Xử lý
+        String[] parts = receiveStr.trim().split(";");
+        String requestId = parts[0];
+        String[] numStrs = parts[1].trim().split(",");
+        
+        List<Integer> list = new ArrayList<>();
+        for (String s : numStrs) {
+            list.add(Integer.parseInt(s.trim()));
+        }
+        Collections.sort(list);
+        
+        int n = list.size();
+        String answer = "";
+        if (n % 2 != 0) {
+            answer = String.valueOf(list.get(n / 2));
+        } else {
+            double median = (list.get(n / 2 - 1) + list.get(n / 2)) / 2.0;
+            // Làm tròn 2 chữ số thập phân
+            median = Math.round(median * 100.0) / 100.0; 
+            // Nếu là số nguyên thì in ra dạng số nguyên (bỏ .0)
+            if (median == (long) median) {
+                answer = String.valueOf((long) median);
+            } else {
+                answer = String.valueOf(median);
+            }
+        }
+
+        // 4. Gửi kết quả
+        String resultStr = requestId + ";" + answer;
+        byte[] resultData = resultStr.getBytes();
+        DatagramPacket resultPacket = new DatagramPacket(resultData, resultData.length, receivePacket.getAddress(), receivePacket.getPort());
+        socket.send(resultPacket);
+        
+        socket.close();
+    }
+}
+
+/**
+ * Đề 17: Che log một dòng: EMAIL, PHONE, TOKEN (cổng 2208, hai pha)
+ * - Gửi: ;studentCode;qCode
+ * - Nhận: requestId;data
+ * - Xử lý: Che email, số điện thoại và token theo quy tắc [EMAIL], [PHONE], token=[TOKEN].
+ * - Gửi lại: requestId;answer
+ */
+
+import java.net.*;
+
+public class Bai17 {
+    public static void main(String[] args) throws Exception {
+        DatagramSocket socket = new DatagramSocket();
+        socket.setSoTimeout(5000);
+        InetAddress serverAddress = InetAddress.getByName("api.ptit.store");
+        int port = 2208;
+
+        // 1. Gửi
+        String sendStr = ";B23DCCN643;qCode17"; 
+        byte[] sendData = sendStr.getBytes();
+        DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, serverAddress, port);
+        socket.send(sendPacket);
+
+        // 2. Nhận
+        byte[] receiveData = new byte[4096];
+        DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
+        socket.receive(receivePacket);
+        String receiveStr = new String(receivePacket.getData(), 0, receivePacket.getLength(), "UTF-8");
+
+        // 3. Xử lý
+        String[] parts = receiveStr.trim().split(";", 2);
+        String requestId = parts[0];
+        String data = parts[1].trim();
+
+        // Sử dụng Regex để che giấu giống với code gốc
+        data = data.replaceAll("token=[^\\s|]+", "token=[TOKEN]");
+        data = data.replaceAll("[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+", "[EMAIL]");
+        data = data.replaceAll("\\b\\d{9,11}\\b", "[PHONE]");
+
+        // Hoặc có thể sử dụng Regex đơn giản (nếu dữ liệu chuẩn mực như De13):
+        // data = data.replaceAll("email=\\S+", "email=[EMAIL]")
+        //            .replaceAll("phone=\\S+", "phone=[PHONE]")
+        //            .replaceAll("token=\\S+", "token=[TOKEN]");
+
+        // 4. Gửi kết quả
+        String resultStr = requestId + ";" + data;
+        byte[] resultData = resultStr.getBytes("UTF-8");
+        DatagramPacket resultPacket = new DatagramPacket(resultData, resultData.length, receivePacket.getAddress(), receivePacket.getPort());
+        socket.send(resultPacket);
+        
+        socket.close();
+    }
+}
+
+/**
+ * Đề 18: Tính checksum (cổng 2207, hai pha)
+ * - Gửi: ;studentCode;qCode
+ * - Nhận: requestId;data
+ * - Xử lý: Tính checksum theo công thức sum((i + 1) * value[i]) mod 100000, với i bắt đầu từ 0.
+ * - Gửi lại: requestId;answer
+ */
+
+import java.net.*;
+
+public class Bai18 {
+    public static void main(String[] args) throws Exception {
+        DatagramSocket socket = new DatagramSocket();
+        socket.setSoTimeout(5000);
+        InetAddress serverAddress = InetAddress.getByName("api.ptit.store");
+        int port = 2207;
+
+        // 1. Gửi
+        String sendStr = ";B23DCCN643;qCode18"; 
+        byte[] sendData = sendStr.getBytes();
+        DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, serverAddress, port);
+        socket.send(sendPacket);
+
+        // 2. Nhận
+        byte[] receiveData = new byte[4096];
+        DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
+        socket.receive(receivePacket);
+        String receiveStr = new String(receivePacket.getData(), 0, receivePacket.getLength(), "UTF-8");
+
+        // 3. Xử lý
+        String[] parts = receiveStr.trim().split(";");
+        String requestId = parts[0];
+        String[] numStrs = parts[1].trim().split(",");
+        
+        long checksum = 0;
+        for (int i = 0; i < numStrs.length; i++) {
+            long value = Long.parseLong(numStrs[i].trim());
+            checksum += (i + 1) * value;
+        }
+        checksum = checksum % 100000;
+
+        // 4. Gửi kết quả
+        String resultStr = requestId + ";" + checksum;
+        byte[] resultData = resultStr.getBytes();
+        DatagramPacket resultPacket = new DatagramPacket(resultData, resultData.length, receivePacket.getAddress(), receivePacket.getPort());
+        socket.send(resultPacket);
+        
+        socket.close();
+    }
+}
+
+/**
+ * Đề 19: Chuẩn hóa chuỗi thành dạng gạch ngang (cổng 2208, hai pha)
+ * - Gửi: ;studentCode;qCode
+ * - Nhận: requestId;data
+ * - Xử lý: Chuyển chuỗi về chữ thường, loại bỏ dấu câu, gom nhiều khoảng trắng 
+ *          thành một khoảng trắng và thay khoảng trắng bằng dấu gạch ngang.
+ * - Gửi lại: requestId;answer
+ */
+
+import java.net.*;
+
+public class Bai19 {
+    public static void main(String[] args) throws Exception {
+        DatagramSocket socket = new DatagramSocket();
+        socket.setSoTimeout(5000);
+        InetAddress serverAddress = InetAddress.getByName("api.ptit.store");
+        int port = 2208;
+
+        // 1. Gửi
+        String sendStr = ";B23DCCN643;qCode19"; 
+        byte[] sendData = sendStr.getBytes();
+        DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, serverAddress, port);
+        socket.send(sendPacket);
+
+        // 2. Nhận
+        byte[] receiveData = new byte[4096];
+        DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
+        socket.receive(receivePacket);
+        String receiveStr = new String(receivePacket.getData(), 0, receivePacket.getLength(), "UTF-8");
+
+        // 3. Xử lý
+        String[] parts = receiveStr.trim().split(";", 2);
+        String requestId = parts[0];
+        String data = parts[1].trim();
+
+        // Chuyển chữ thường
+        data = data.toLowerCase();
+        // Loại bỏ dấu câu (Regex: \p{Punct} đại diện cho các dấu câu trong Java)
+        data = data.replaceAll("\\p{Punct}", "");
+        // Gom khoảng trắng và thay bằng gạch ngang
+        data = data.replaceAll("\\s+", "-");
+
+        // 4. Gửi kết quả
+        String resultStr = requestId + ";" + data;
+        byte[] resultData = resultStr.getBytes("UTF-8");
+        DatagramPacket resultPacket = new DatagramPacket(resultData, resultData.length, receivePacket.getAddress(), receivePacket.getPort());
+        socket.send(resultPacket);
+        
+        socket.close();
+    }
+}
+
+/**
+ * Đề 20: Số lớn thứ hai và số nhỏ thứ hai trong 50 số (cổng 2207)
+ * - Gửi: ;studentCode;qCode
+ * - Nhận: requestId;z1,z2,...,z50
+ * - Xử lý: Tìm số lớn thứ hai và số nhỏ thứ hai của thông điệp.
+ * - Gửi lại: requestId;secondMax,secondMin
+ */
+
+import java.net.*;
+import java.util.*;
+
+public class Bai20 {
+    public static void main(String[] args) throws Exception {
+        DatagramSocket socket = new DatagramSocket();
+        socket.setSoTimeout(5000);
+        InetAddress serverAddress = InetAddress.getByName("api.ptit.store");
+        int port = 2207;
+
+        // 1. Gửi
+        String sendStr = ";B23DCCN643;qCode20"; 
+        byte[] sendData = sendStr.getBytes();
+        DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, serverAddress, port);
+        socket.send(sendPacket);
+
+        // 2. Nhận
+        byte[] receiveData = new byte[4096];
+        DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
+        socket.receive(receivePacket);
+        String receiveStr = new String(receivePacket.getData(), 0, receivePacket.getLength(), "UTF-8");
+
+        // 3. Xử lý
+        String[] parts = receiveStr.trim().split(";");
+        String requestId = parts[0];
+        String[] numStrs = parts[1].trim().split(",");
+        
+        // Dùng TreeSet để lọc trùng lặp và tự động sắp xếp
+        TreeSet<Integer> st = new TreeSet<>();
+        for (String x : numStrs) {
+            st.add(Integer.parseInt(x.trim()));
+        }
+        
+        // lower(last()): lấy số bé hơn trực tiếp phần tử lớn nhất -> Max thứ 2
+        int secondMax = st.lower(st.last());
+        // higher(first()): lấy số lớn hơn trực tiếp phần tử bé nhất -> Min thứ 2
+        int secondMin = st.higher(st.first());
+
+        // 4. Gửi kết quả
+        String resultStr = requestId + ";" + secondMax + "," + secondMin;
+        byte[] resultData = resultStr.getBytes();
+        DatagramPacket resultPacket = new DatagramPacket(resultData, resultData.length, receivePacket.getAddress(), receivePacket.getPort());
+        socket.send(resultPacket);
+        
+        socket.close();
+    }
+}
+
+/**
+ * Bài 21: Max trong mỗi cửa sổ trượt kích thước k (cổng 2207)
+ * - Gửi: ;studentCode;qCode
+ * - Nhận: requestId;...;k;num1,num2,... (Tách bằng dấu ; và lấy k, mảng số)
+ * - Xử lý: Tìm phần tử lớn nhất trong từng đoạn con liên tiếp kích thước k.
+ * - Gửi lại: requestId;max1,max2,...
+ */
+
+import java.net.*;
+import java.util.*;
+
+public class Bai21 {
+    public static void main(String[] args) throws Exception {
+        DatagramSocket socket = new DatagramSocket();
+        socket.setSoTimeout(5000);
+        InetAddress serverAddress = InetAddress.getByName("api.ptit.store");
+        int port = 2207;
+
+        // 1. Gửi
+        String sendStr = ";B23DCCN643;qCode21"; 
+        byte[] sendData = sendStr.getBytes();
+        DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, serverAddress, port);
+        socket.send(sendPacket);
+
+        // 2. Nhận
+        byte[] receiveData = new byte[4096];
+        DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
+        socket.receive(receivePacket);
+        String receiveStr = new String(receivePacket.getData(), 0, receivePacket.getLength(), "UTF-8");
+
+        // 3. Xử lý
+        String[] parts = receiveStr.trim().split(";");
+        String requestId = parts[0];
+        
+        // Theo format trong UDP3DeFinal, k ở phần tử thứ 2, dãy số ở phần tử thứ 3
+        int k = Integer.parseInt(parts[2].trim());
+        String[] words = parts[3].trim().split(",");
+        
+        ArrayList<Integer> ds = new ArrayList<>();
+        for (String x : words) {
+            ds.add(Integer.parseInt(x.trim()));
+        }
+        
+        StringBuilder res = new StringBuilder();
+        for (int i = 0; i <= ds.size() - k; i++) {
+            res.append(",").append(Collections.max(ds.subList(i, i + k)));
+        }
+        
+        // 4. Gửi kết quả
+        String resultStr = requestId + ";" + res.toString().replaceFirst(",", "");
+        byte[] resultData = resultStr.getBytes();
+        DatagramPacket resultPacket = new DatagramPacket(resultData, resultData.length, receivePacket.getAddress(), receivePacket.getPort());
+        socket.send(resultPacket);
+        
+        socket.close();
+    }
+}
+
+/**
+ * Bài 22: Tìm N số nguyên tố đầu tiên (cổng 2207)
+ * - Gửi: ;studentCode;qCode
+ * - Nhận: requestId;n
+ * - Xử lý: Tìm n số nguyên tố đầu tiên.
+ * - Gửi lại: requestId;p1,p2,...,pn
+ */
+
+import java.net.*;
+
+public class Bai22 {
+    public static void main(String[] args) throws Exception {
+        DatagramSocket socket = new DatagramSocket();
+        socket.setSoTimeout(5000);
+        InetAddress serverAddress = InetAddress.getByName("api.ptit.store");
+        int port = 2207;
+
+        // 1. Gửi
+        String sendStr = ";B23DCCN643;qCode22"; 
+        byte[] sendData = sendStr.getBytes();
+        DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, serverAddress, port);
+        socket.send(sendPacket);
+
+        // 2. Nhận
+        byte[] receiveData = new byte[4096];
+        DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
+        socket.receive(receivePacket);
+        String receiveStr = new String(receivePacket.getData(), 0, receivePacket.getLength(), "UTF-8");
+
+        // 3. Xử lý
+        String[] parts = receiveStr.trim().split(";");
+        String requestId = parts[0];
+        int n = Integer.parseInt(parts[1].trim());
+        
+        StringBuilder ds = new StringBuilder();
+        int count = 0;
+        int num = 2;
+        
+        while (count < n) {
+            boolean isPrime = true;
+            for (int i = 2; i * i <= num; i++) {
+                if (num % i == 0) {
+                    isPrime = false;
+                    break;
+                }
+            }
+            if (isPrime) {
+                ds.append(",").append(num);
+                count++;
+            }
+            num++;
+        }
+        
+        // 4. Gửi kết quả
+        String resultStr = requestId + ";" + ds.toString().replaceFirst(",", "");
+        byte[] resultData = resultStr.getBytes();
+        DatagramPacket resultPacket = new DatagramPacket(resultData, resultData.length, receivePacket.getAddress(), receivePacket.getPort());
+        socket.send(resultPacket);
+        
+        socket.close();
+    }
+}
